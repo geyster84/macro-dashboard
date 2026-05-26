@@ -1,0 +1,348 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ReferenceLine,
+} from "recharts";
+import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
+
+interface Observation {
+  date: string;
+  value: string;
+}
+
+interface SeriesData {
+  seriesId: string;
+  title: string;
+  units: string;
+  lastUpdated: string;
+  observations: Observation[];
+}
+
+interface IndicatorModalProps {
+  seriesId: string;
+  displayName: string;
+  onClose: () => void;
+}
+
+type RangeKey = "1Y" | "5Y" | "10Y" | "MAX";
+
+const RANGES: { key: RangeKey; label: string; years: number | null }[] = [
+  { key: "1Y", label: "1년", years: 1 },
+  { key: "5Y", label: "5년", years: 5 },
+  { key: "10Y", label: "10년", years: 10 },
+  { key: "MAX", label: "전체", years: null },
+];
+
+// 과거 위기 시점 (큰 차트에만 표시)
+const CRISIS_EVENTS = [
+  { date: "2008-09-15", label: "리먼 파산" },
+  { date: "2020-03-11", label: "코로나 팬데믹" },
+  { date: "2022-02-24", label: "우크라이나 전쟁" },
+  { date: "2023-03-10", label: "SVB 파산" },
+];
+
+function getStartDate(years: number | null): string {
+  if (years === null) return "";
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - years);
+  return d.toISOString().split("T")[0];
+}
+
+export default function IndicatorModal({
+  seriesId,
+  displayName,
+  onClose,
+}: IndicatorModalProps) {
+  const [range, setRange] = useState<RangeKey>("10Y");
+  const [data, setData] = useState<SeriesData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ESC 키로 닫기 + 배경 스크롤 막기
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEsc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleEsc);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  // 데이터 가져오기
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const rangeConf = RANGES.find((r) => r.key === range)!;
+    const startDate = getStartDate(rangeConf.years);
+    const url = `/api/fred?seriesId=${seriesId}${
+      startDate ? `&startDate=${startDate}` : ""
+    }`;
+
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((json) => {
+        if (!cancelled) setData(json);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seriesId, range]);
+
+  const obs = data
+    ? data.observations
+        .map((o) => ({ date: o.date, value: parseFloat(o.value) }))
+        .filter((o) => !isNaN(o.value))
+    : [];
+
+  const latest = obs[obs.length - 1];
+  const previous = obs[obs.length - 2];
+  const latestValue = latest?.value ?? 0;
+  const previousValue = previous?.value ?? 0;
+  const change = latestValue - previousValue;
+  const changePercent = previousValue ? (change / previousValue) * 100 : 0;
+  const isUp = change > 0;
+  const isDown = change < 0;
+
+   // 이 지표의 위험 기준값 찾기
+  const indicator = [...CRISIS_INDICATORS, ...MACRO_INDICATORS].find(
+    (i) => i.seriesId === seriesId
+  );
+
+  // 차트 Y축 범위 — 기준선까지 포함
+  const dataMin = obs.length > 0 ? Math.min(...obs.map((o) => o.value)) : 0;
+  const dataMax = obs.length > 0 ? Math.max(...obs.map((o) => o.value)) : 1;
+  const thresholds = [
+    indicator?.warningThreshold,
+    indicator?.dangerThreshold,
+  ].filter((v): v is number => v !== undefined);
+  const minVal = Math.min(dataMin, ...thresholds);
+  const maxVal = Math.max(dataMax, ...thresholds);
+  const padding = (maxVal - minVal) * 0.1;
+
+  // 현재 데이터 범위에 포함되는 위기 시점만 필터
+  const firstDate = obs[0]?.date ?? "";
+  const lastDate = obs[obs.length - 1]?.date ?? "";
+  const visibleCrises = CRISIS_EVENTS.filter(
+    (c) => c.date >= firstDate && c.date <= lastDate
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-5xl max-h-[95vh] overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-4 sm:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 닫기 버튼 */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 text-xl flex items-center justify-center"
+          aria-label="닫기"
+        >
+          ✕
+        </button>
+
+        {/* 헤더 */}
+        <div className="mb-4 pr-12">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-bold text-white">
+              {displayName}
+            </h2>
+            <span className="text-xs sm:text-sm text-gray-500 font-mono">
+              {seriesId}
+            </span>
+          </div>
+          {data && (
+            <p className="text-xs sm:text-sm text-gray-400 mt-1">
+              {data.units}
+            </p>
+          )}
+        </div>
+
+        {/* 현재값 */}
+        {!loading && !error && data && (
+          <div className="flex items-baseline gap-3 mb-4 flex-wrap">
+            <span className="text-3xl sm:text-5xl font-bold text-white">
+              {latestValue.toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+              })}
+            </span>
+            <span
+              className={`text-sm sm:text-base font-medium ${
+                isUp
+                  ? "text-red-400"
+                  : isDown
+                  ? "text-blue-400"
+                  : "text-gray-400"
+              }`}
+            >
+              {isUp ? "▲" : isDown ? "▼" : "—"}{" "}
+              {Math.abs(change).toFixed(2)} ({changePercent.toFixed(2)}%)
+            </span>
+          </div>
+        )}
+
+        {/* 차트 */}
+        <div className="h-64 sm:h-96 -mx-2 mb-4">
+          {loading && (
+            <div className="h-full flex items-center justify-center text-gray-500">
+              로딩 중...
+            </div>
+          )}
+          {error && (
+            <div className="h-full flex items-center justify-center text-red-400">
+              로드 실패: {error}
+            </div>
+          )}
+          {!loading && !error && data && (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={obs}>
+                <CartesianGrid stroke="#1f2937" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  tickFormatter={(v) => v.slice(0, 7)}
+                  minTickGap={50}
+                />
+                <YAxis
+                  domain={[minVal - padding, maxVal + padding]}
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
+                  width={55}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#111827",
+                    border: "1px solid #374151",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                  }}
+                  labelStyle={{ color: "#9ca3af" }}
+                  itemStyle={{ color: "#60a5fa" }}
+                  formatter={(value) =>
+                    typeof value === "number"
+                      ? value.toFixed(2)
+                      : String(value)
+                  }
+                />
+                {/* 위험 기준선 (가로) */}
+                  {indicator?.warningThreshold !== undefined && (
+                  <ReferenceLine
+                    y={indicator.warningThreshold}
+                    stroke="#eab308"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.8}
+                    label={{
+                      value: `경계 ${indicator.warningThreshold}`,
+                      position: "right",
+                      fill: "#eab308",
+                      fontSize: 11,
+                    }}
+                  />
+                )}
+                {indicator?.dangerThreshold !== undefined && (
+                  <ReferenceLine
+                    y={indicator.dangerThreshold}
+                    stroke="#ef4444"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.8}
+                    label={{
+                      value: `위험 ${indicator.dangerThreshold}`,
+                      position: "right",
+                      fill: "#ef4444",
+                      fontSize: 11,
+                    }}
+                  />
+                )}
+                {/* 과거 위기 시점 세로줄 */}
+                {visibleCrises.map((crisis) => (
+                  <ReferenceLine
+                    key={crisis.date}
+                    x={crisis.date}
+                    stroke="#ef4444"
+                    strokeDasharray="3 3"
+                    strokeOpacity={0.6}
+                    label={{
+                      value: crisis.label,
+                      position: "top",
+                      fill: "#fca5a5",
+                      fontSize: 10,
+                    }}
+                  />
+                ))}
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#60a5fa"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* 기간 선택 버튼 */}
+        <div className="flex gap-2 mb-4">
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              className={`text-sm px-3 py-2 rounded transition-colors flex-1 ${
+                range === r.key
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 위기 시점 범례 */}
+        {visibleCrises.length > 0 && (
+          <div className="text-xs text-gray-500 mb-3 flex flex-wrap gap-x-4 gap-y-1">
+            <span className="text-red-400">⎯⎯</span> 빨간 점선: 과거 위기 시점
+            {visibleCrises.map((c) => (
+              <span key={c.date}>
+                · {c.label} ({c.date})
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* 푸터 정보 */}
+        {!loading && !error && data && (
+          <div className="text-xs sm:text-sm text-gray-500 border-t border-gray-800 pt-3">
+            <div>최근 발표: {latest?.date}</div>
+            <div>출처: FRED · 갱신: {data.lastUpdated.split(" ")[0]}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
