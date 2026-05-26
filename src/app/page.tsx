@@ -3,6 +3,7 @@
 import { useState } from "react";
 import IndicatorCard from "@/components/IndicatorCard";
 import IndicatorModal from "@/components/IndicatorModal";
+import TodayInsights from "@/components/TodayInsights";
 import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
 
 function groupByCategory<T extends { category: string }>(items: T[]) {
@@ -28,9 +29,12 @@ export default function Home() {
             US Macro Dashboard
           </h1>
           <p className="text-gray-400 text-sm">
-            미국 거시경제 지표 실시간 모니터링 · 데이터 출처: FRED
+            미국 거시경제 지표 실시간 모니터링 · 데이터 출처: FRED · 뉴스: NAVER
           </p>
         </header>
+
+        {/* 🆕 오늘 발표된 지표 + 관련 뉴스 (자동 갱신) */}
+        <TodayInsights />
 
         <section className="mb-12">
           <div className="flex items-center gap-3 mb-5">
@@ -102,7 +106,7 @@ export default function Home() {
 
         <footer className="mt-16 pt-8 border-t border-gray-800 text-center text-xs text-gray-600">
           <p>
-            Data from FRED · Federal Reserve Bank of St. Louis
+            Data from FRED · Federal Reserve Bank of St. Louis · 뉴스 출처: NAVER
           </p>
           <p className="mt-1">Updates automatically every hour</p>
         </footer>
