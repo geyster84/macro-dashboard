@@ -4,6 +4,7 @@ import { useState } from "react";
 import IndicatorCard from "@/components/IndicatorCard";
 import IndicatorModal from "@/components/IndicatorModal";
 import TodayInsights from "@/components/TodayInsights";
+import HeatmapBoard from "@/components/HeatmapBoard";
 import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
 
 function groupByCategory<T extends { category: string }>(items: T[]) {
@@ -32,6 +33,13 @@ export default function Home() {
             미국 거시경제 지표 실시간 모니터링 · 데이터 출처: FRED · 뉴스: NAVER
           </p>
         </header>
+
+        {/* 🌡️ 위기 요약 히트맵 보드 */}
+        <HeatmapBoard
+          onSelect={(seriesId, displayName) =>
+            setSelected({ seriesId, displayName })
+          }
+        />
 
         {/* 🆕 오늘 발표된 지표 + 관련 뉴스 (자동 갱신) */}
         <TodayInsights />
