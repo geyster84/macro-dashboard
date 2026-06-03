@@ -19,7 +19,7 @@ const ALL_INDICATORS: Indicator[] = [...CRISIS_INDICATORS, ...MACRO_INDICATORS];
 // 최근 2년치 시작일 (가벼운 데이터로 최신값/직전값만 빠르게)
 function twoYearsAgo(): string {
   const d = new Date();
-  d.setFullYear(d.getFullYear() - 2);
+  d.setFullYear(d.getFullYear() - 5);
   return d.toISOString().split("T")[0];
 }
 
