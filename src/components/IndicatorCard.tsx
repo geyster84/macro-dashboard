@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
+import { queuedFetch } from "@/lib/fetchQueue";
 
 interface Observation {
   date: string;
@@ -69,7 +70,7 @@ export default function IndicatorCard({
       startDate ? `&startDate=${startDate}` : ""
     }`;
 
-    fetch(url)
+    queuedFetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
