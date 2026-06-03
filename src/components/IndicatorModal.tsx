@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
+import { queuedFetch } from "@/lib/fetchQueue";
 
 interface Observation {
   date: string;
@@ -56,6 +57,17 @@ function getStartDate(years: number | null): string {
   return d.toISOString().split("T")[0];
 }
 
+// Y축 숫자 보기 좋게 정리 (긴 소수 찌꺼기 제거, 큰 수는 3M·215K 식으로)
+function formatYTick(v: number): string {
+  if (Math.abs(v) >= 1000) {
+    return v.toLocaleString("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    });
+  }
+  return Number(v.toFixed(2)).toString();
+}
+
 export default function IndicatorModal({
   seriesId,
   displayName,
@@ -91,7 +103,7 @@ export default function IndicatorModal({
       startDate ? `&startDate=${startDate}` : ""
     }`;
 
-    fetch(url)
+    queuedFetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -233,6 +245,7 @@ export default function IndicatorModal({
                   domain={[minVal - padding, maxVal + padding]}
                   tick={{ fontSize: 11, fill: "#9ca3af" }}
                   width={55}
+                  tickFormatter={formatYTick}
                 />
                 <Tooltip
                   contentStyle={{
