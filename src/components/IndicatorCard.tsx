@@ -49,6 +49,17 @@ function getStartDate(years: number | null): string {
   return d.toISOString().split("T")[0];
 }
 
+// Y축 숫자 보기 좋게 정리 (긴 소수 찌꺼기 제거, 큰 수는 3M·215K 식으로)
+function formatYTick(v: number): string {
+  if (Math.abs(v) >= 1000) {
+    return v.toLocaleString("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    });
+  }
+  return Number(v.toFixed(2)).toString();
+}
+
 export default function IndicatorCard({
   seriesId,
   displayName,
@@ -191,7 +202,8 @@ export default function IndicatorCard({
             <YAxis
               domain={[minVal - padding, maxVal + padding]}
               tick={{ fontSize: 10, fill: "#6b7280" }}
-              width={40}
+              width={44}
+              tickFormatter={formatYTick}
             />
             <Tooltip
               contentStyle={{
