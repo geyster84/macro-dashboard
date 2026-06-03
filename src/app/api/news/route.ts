@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// 메모리 캐시 (1시간 유효)
+// Vercel 함수 최대 실행 시간(초)
+export const maxDuration = 30;
+
+// 메모리 캐시 (워밍된 인스턴스에서만 보조 동작 — 주 캐싱은 아래 CDN 헤더)
 const cache = new Map<string, { data: unknown; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 60; // 1시간
 
@@ -17,7 +20,11 @@ export async function GET(req: NextRequest) {
   const cacheKey = `${query}-${display}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json(cached.data);
+    return NextResponse.json(cached.data, {
+      headers: {
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    });
   }
 
   const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
@@ -26,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
     return NextResponse.json(
       { error: "NAVER API keys not configured" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store" } }
     );
   }
 
@@ -46,7 +53,7 @@ export async function GET(req: NextRequest) {
     if (!response.ok) {
       return NextResponse.json(
         { error: `NAVER API error: ${response.status}` },
-        { status: 502 }
+        { status: 502, headers: { "Cache-Control": "no-store" } }
       );
     }
 
@@ -68,11 +75,15 @@ export async function GET(req: NextRequest) {
     const result = { items, query, count: items.length };
 
     cache.set(cacheKey, { data: result, timestamp: Date.now() });
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store" } }
     );
   }
 }
