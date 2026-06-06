@@ -203,16 +203,21 @@ export default function IndicatorModal({
   let percentileRank: number | null = null; // 과거의 몇 %가 현재보다 낮은가
   let pctTotal = 0;
   let spanText = "";
-  if (fullValues && fullValues.length >= 24) {
+  let spanYears = 0;
+  if (fullValues && fullValues.length >= 24 && fullSpan) {
     const total = fullValues.length;
     const ref = fullValues[total - 1]; // 가장 최근 값
     const below = fullValues.filter((v) => v < ref).length;
     percentileRank = (below / total) * 100;
     pctTotal = total;
-    if (fullSpan) {
-      spanText = `${fullSpan.first.slice(0, 4)}년~${fullSpan.last.slice(0, 4)}년`;
-    }
+    spanText = `${fullSpan.first.slice(0, 4)}년~${fullSpan.last.slice(0, 4)}년`;
+    spanYears =
+      (new Date(fullSpan.last).getTime() -
+        new Date(fullSpan.first).getTime()) /
+      (365.25 * 24 * 60 * 60 * 1000);
   }
+  // 데이터 기간이 5년 미만이면 "역사적" 백분위로 보기 어려움 → 안내로 대체
+  const historyTooShort = percentileRank !== null && spanYears < 5;
 
   // 차트 Y축 범위 — 기준선까지 포함
   const dataMin = obs.length > 0 ? Math.min(...obs.map((o) => o.value)) : 0;
@@ -296,14 +301,21 @@ export default function IndicatorModal({
         {!loading && !error && data && percentileRank !== null && (
           <div className="mb-3 text-xs sm:text-sm">
             <span className="text-gray-400">📊 역사적 위치: </span>
-            <span className="text-gray-100 font-semibold">
-              {percentileText(percentileRank)}
-            </span>
-            {spanText && (
+            {historyTooShort ? (
               <span className="text-gray-500">
-                {" "}
-                · {spanText} 데이터 {pctTotal.toLocaleString()}개 기준
+                데이터 기간이 짧아 생략 ({spanText} · {pctTotal.toLocaleString()}개만
+                제공)
               </span>
+            ) : (
+              <>
+                <span className="text-gray-100 font-semibold">
+                  {percentileText(percentileRank)}
+                </span>
+                <span className="text-gray-500">
+                  {" "}
+                  · {spanText} 데이터 {pctTotal.toLocaleString()}개 기준
+                </span>
+              </>
             )}
           </div>
         )}
