@@ -69,11 +69,14 @@ function formatYTick(v: number): string {
   return Number(v.toFixed(2)).toString();
 }
 
-// 역사적 백분위 문구 (top = 상위 몇 %인지)
-function percentileText(top: number): string {
-  if (top <= 1) return "역대 최고 수준 (상위 1% 이내)";
-  if (top >= 99) return "역대 최저 수준 (하위 1% 이내)";
-  return `상위 ${top}%`;
+// 역사적 백분위 문구
+// rankFromBottom = 과거 데이터의 몇 %가 현재값보다 낮은가 (0~100)
+function percentileText(rankFromBottom: number): string {
+  const fromTop = 100 - rankFromBottom;
+  if (fromTop <= 1) return "역대 최고 수준 (상위 1% 이내)";
+  if (rankFromBottom <= 1) return "역대 최저 수준 (하위 1% 이내)";
+  if (rankFromBottom >= 50) return `상위 ${Math.round(fromTop)}%`; // 높은 편
+  return `하위 ${Math.round(rankFromBottom)}%`; // 낮은 편
 }
 
 export default function IndicatorModal({
@@ -197,15 +200,14 @@ export default function IndicatorModal({
   const description = INDICATOR_DESCRIPTIONS[seriesId];
 
   // 역사적 백분위 계산 (전체 데이터의 가장 최근 값 기준)
-  let percentileTop: number | null = null;
+  let percentileRank: number | null = null; // 과거의 몇 %가 현재보다 낮은가
   let pctTotal = 0;
   let spanText = "";
   if (fullValues && fullValues.length >= 24) {
     const total = fullValues.length;
     const ref = fullValues[total - 1]; // 가장 최근 값
     const below = fullValues.filter((v) => v < ref).length;
-    const rankFromBottom = (below / total) * 100; // 과거의 몇 %가 현재보다 낮은가
-    percentileTop = Math.round(100 - rankFromBottom);
+    percentileRank = (below / total) * 100;
     pctTotal = total;
     if (fullSpan) {
       spanText = `${fullSpan.first.slice(0, 4)}년~${fullSpan.last.slice(0, 4)}년`;
@@ -291,11 +293,11 @@ export default function IndicatorModal({
         )}
 
         {/* 역사적 백분위 */}
-        {!loading && !error && data && percentileTop !== null && (
+        {!loading && !error && data && percentileRank !== null && (
           <div className="mb-3 text-xs sm:text-sm">
             <span className="text-gray-400">📊 역사적 위치: </span>
             <span className="text-gray-100 font-semibold">
-              {percentileText(percentileTop)}
+              {percentileText(percentileRank)}
             </span>
             {spanText && (
               <span className="text-gray-500">
