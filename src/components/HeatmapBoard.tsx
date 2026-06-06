@@ -16,7 +16,7 @@ interface TileState {
 
 const ALL_INDICATORS: Indicator[] = [...CRISIS_INDICATORS, ...MACRO_INDICATORS];
 
-// 최근 2년치 시작일 (가벼운 데이터로 최신값/직전값만 빠르게)
+// 최근 데이터 시작일 (가벼운 데이터로 최신값/직전값만 빠르게)
 function twoYearsAgo(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 5);
@@ -45,6 +45,56 @@ const STATUS_STYLE: Record<Status, string> = {
   warning: "bg-yellow-500/90 border-yellow-300 text-black",
   normal: "bg-emerald-700/80 border-emerald-500 text-white",
   unknown: "bg-gray-800 border-gray-700 text-gray-400",
+};
+
+// ── 위기 종합 단계 ───────────────────────────────
+type Stage = "stable" | "caution" | "elevated" | "danger";
+
+interface StageInfo {
+  emoji: string;
+  label: string;
+  desc: string;
+  box: string;
+  labelColor: string;
+}
+
+// 위험/경계 개수로 종합 단계 결정 (아래 숫자는 자유롭게 조정 가능)
+function getStage(danger: number, warning: number): Stage {
+  if (danger >= 3) return "danger";                    // 위험 3개 이상 → 🔴 위험
+  if (danger >= 1 || warning >= 4) return "elevated";  // 위험 1~2개 또는 경계 4개 이상 → 🟠 경계
+  if (warning >= 1) return "caution";                  // 경계 1~3개 → 🟡 주의
+  return "stable";                                     // 그 외 → 🟢 안정
+}
+
+const STAGE_INFO: Record<Stage, StageInfo> = {
+  stable: {
+    emoji: "🟢",
+    label: "안정",
+    desc: "특이 위험 신호 없음",
+    box: "bg-emerald-950/40 border-emerald-700",
+    labelColor: "text-emerald-400",
+  },
+  caution: {
+    emoji: "🟡",
+    label: "주의",
+    desc: "일부 경계 신호 발생",
+    box: "bg-yellow-950/40 border-yellow-700",
+    labelColor: "text-yellow-400",
+  },
+  elevated: {
+    emoji: "🟠",
+    label: "경계",
+    desc: "위험 신호 감지 — 주시 필요",
+    box: "bg-orange-950/40 border-orange-700",
+    labelColor: "text-orange-400",
+  },
+  danger: {
+    emoji: "🔴",
+    label: "위험",
+    desc: "다수 위험 신호 — 경계 강화",
+    box: "bg-red-950/50 border-red-600",
+    labelColor: "text-red-400",
+  },
 };
 
 interface HeatmapBoardProps {
@@ -111,6 +161,11 @@ export default function HeatmapBoard({ onSelect }: HeatmapBoardProps) {
     else if (t.status === "normal") normal++;
   });
   const loadedCount = Object.values(tiles).filter((t) => t.loaded).length;
+  const allLoaded = loadedCount === ALL_INDICATORS.length;
+
+  // 종합 단계
+  const stage = getStage(danger, warning);
+  const info = STAGE_INFO[stage];
 
   return (
     <section className="mb-10">
@@ -119,14 +174,39 @@ export default function HeatmapBoard({ onSelect }: HeatmapBoardProps) {
         <span className="text-xs text-gray-500">한눈에 보는 전체 상태</span>
       </div>
 
-      {/* 종합 한 줄 */}
-      <div className="flex items-center gap-4 mb-4 text-sm font-medium">
-        <span className="text-red-400">🔴 위험 {danger}</span>
-        <span className="text-yellow-400">🟡 경계 {warning}</span>
-        <span className="text-emerald-400">🟢 정상 {normal}</span>
-        <span className="text-gray-600 text-xs ml-auto">
-          {loadedCount}/{ALL_INDICATORS.length}
-        </span>
+      {/* 종합 단계 헤드라인 */}
+      <div
+        className={`rounded-xl border ${info.box} p-4 mb-4 flex items-center gap-4`}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-3xl sm:text-4xl leading-none">{info.emoji}</span>
+          <div className="min-w-0">
+            <div className="text-[11px] text-gray-400 leading-tight">
+              현재 위기 단계
+            </div>
+            <div
+              className={`text-2xl sm:text-3xl font-extrabold leading-tight ${info.labelColor}`}
+            >
+              {info.label}
+            </div>
+            <div className="text-[11px] text-gray-400 leading-tight truncate">
+              {info.desc}
+            </div>
+          </div>
+        </div>
+
+        <div className="ml-auto text-right shrink-0">
+          <div className="flex items-center justify-end gap-2 sm:gap-3 text-sm font-medium">
+            <span className="text-red-400">🔴 {danger}</span>
+            <span className="text-yellow-400">🟡 {warning}</span>
+            <span className="text-emerald-400">🟢 {normal}</span>
+          </div>
+          <div className="text-[11px] text-gray-500 mt-1">
+            {allLoaded
+              ? "35개 지표 기준"
+              : `집계 중… ${loadedCount}/${ALL_INDICATORS.length}`}
+          </div>
+        </div>
       </div>
 
       {/* 색 타일 격자 */}
