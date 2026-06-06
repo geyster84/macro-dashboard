@@ -135,10 +135,12 @@ export default function IndicatorCard({
   const isUp = change > 0;
   const isDown = change < 0;
 
-    // 이 지표의 위험 기준값 찾기
+  // 이 지표의 위험 기준값 찾기
   const indicator = [...CRISIS_INDICATORS, ...MACRO_INDICATORS].find(
     (i) => i.seriesId === seriesId
   );
+  // YoY(전년比) 지표면 변화 표시를 'percent point' 방식으로
+  const isYoY = indicator?.transform === "yoy";
 
   // 차트 Y축 범위 — 기준선까지 포함
   const dataMin = obs.length > 0 ? Math.min(...obs.map((o) => o.value)) : 0;
@@ -174,6 +176,7 @@ export default function IndicatorCard({
           {latestValue.toLocaleString(undefined, {
             maximumFractionDigits: 2,
           })}
+          {isYoY ? "%" : ""}
         </span>
         <span
           className={`text-xs font-medium ${
@@ -185,7 +188,8 @@ export default function IndicatorCard({
           }`}
         >
           {isUp ? "▲" : isDown ? "▼" : "—"}{" "}
-          {Math.abs(change).toFixed(2)} ({changePercent.toFixed(2)}%)
+          {Math.abs(change).toFixed(2)}
+          {isYoY ? "%p" : ` (${changePercent.toFixed(2)}%)`}
         </span>
       </div>
 
@@ -218,31 +222,22 @@ export default function IndicatorCard({
                 typeof value === "number" ? value.toFixed(2) : String(value)
               }
             />
-               {(() => {
-              const ind = [...CRISIS_INDICATORS, ...MACRO_INDICATORS].find(
-                (i) => i.seriesId === seriesId
-              );
-              return (
-                <>
-                  {ind?.warningThreshold !== undefined && (
-                    <ReferenceLine
-                      y={ind.warningThreshold}
-                      stroke="#eab308"
-                      strokeDasharray="4 4"
-                      strokeOpacity={0.7}
-                    />
-                  )}
-                  {ind?.dangerThreshold !== undefined && (
-                    <ReferenceLine
-                      y={ind.dangerThreshold}
-                      stroke="#ef4444"
-                      strokeDasharray="4 4"
-                      strokeOpacity={0.7}
-                    />
-                  )}
-                </>
-              );
-            })()}
+            {indicator?.warningThreshold !== undefined && (
+              <ReferenceLine
+                y={indicator.warningThreshold}
+                stroke="#eab308"
+                strokeDasharray="4 4"
+                strokeOpacity={0.7}
+              />
+            )}
+            {indicator?.dangerThreshold !== undefined && (
+              <ReferenceLine
+                y={indicator.dangerThreshold}
+                stroke="#ef4444"
+                strokeDasharray="4 4"
+                strokeOpacity={0.7}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="value"

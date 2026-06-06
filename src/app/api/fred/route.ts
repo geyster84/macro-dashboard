@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { findIndicator } from "@/lib/indicators";
 
 const FRED_API_KEY = process.env.NEXT_PUBLIC_FRED_API_KEY;
 const BASE_URL = "https://api.stlouisfed.org/fred";
@@ -29,6 +30,34 @@ async function fetchWithRetry(url: string, retries = 2): Promise<Response> {
   throw new Error("FRED 요청 실패 (네트워크 오류)");
 }
 
+type Obs = { date: string; value: string };
+
+// 전년比(YoY, %) 변환 — 월간 데이터 기준, 같은 '연-월'의 1년 전 값과 비교
+function computeYoY(observations: Obs[]): Obs[] {
+  // "YYYY-MM" → 값  형태의 표를 만든다
+  const map = new Map<string, number>();
+  for (const o of observations) {
+    const v = parseFloat(o.value);
+    if (!isNaN(v)) map.set(o.date.slice(0, 7), v);
+  }
+
+  const result: Obs[] = [];
+  for (const o of observations) {
+    const v = parseFloat(o.value);
+    if (isNaN(v)) continue;
+    const ym = o.date.slice(0, 7); // "YYYY-MM"
+    const year = parseInt(ym.slice(0, 4), 10);
+    const month = ym.slice(5, 7);
+    const prevKey = `${year - 1}-${month}`; // 1년 전 같은 달
+    const prev = map.get(prevKey);
+    if (prev !== undefined && prev !== 0) {
+      const yoy = (v / prev - 1) * 100;
+      result.push({ date: o.date, value: yoy.toFixed(2) });
+    }
+  }
+  return result;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const seriesId = searchParams.get("seriesId");
@@ -40,10 +69,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "seriesId required" }, { status: 400 });
   }
 
+  // 이 지표가 전년比(YoY) 변환 대상인지 확인
+  const indicator = findIndicator(seriesId);
+  const isYoY = indicator?.transform === "yoy";
+
+  // YoY는 '1년 전 값'이 필요 → 요청 시작일보다 약 13개월 더 일찍부터 받아온다
+  let fetchStart = startDate;
+  if (isYoY && startDate !== "1900-01-01") {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() - 400);
+    fetchStart = d.toISOString().split("T")[0];
+  }
+
   try {
     const infoUrl = `${BASE_URL}/series?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json`;
 
-    let obsUrl = `${BASE_URL}/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=asc&observation_start=${startDate}`;
+    let obsUrl = `${BASE_URL}/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=asc&observation_start=${fetchStart}`;
     if (endDate) obsUrl += `&observation_end=${endDate}`;
 
     const [infoRes, obsRes] = await Promise.all([
@@ -63,16 +104,28 @@ export async function GET(req: NextRequest) {
     const obsData = await obsRes.json();
 
     const info = infoData.seriess?.[0];
-    const observations = (obsData.observations || []).filter(
+    let observations: Obs[] = (obsData.observations || []).filter(
       (o: { value: string }) => o.value !== "."
     );
+
+    let units = info?.units ?? "";
+
+    // 전년比 변환 적용
+    if (isYoY) {
+      observations = computeYoY(observations);
+      // 버퍼로 더 받아온 앞부분은 잘라내고, 요청한 기간만 남긴다
+      if (startDate !== "1900-01-01") {
+        observations = observations.filter((o) => o.date >= startDate);
+      }
+      units = "% (전년比, YoY)";
+    }
 
     // 성공 응답은 Vercel 엣지에 1시간 저장 → 이후 접속은 FRED 안 거치고 즉시 응답
     return NextResponse.json(
       {
         seriesId,
         title: info?.title ?? seriesId,
-        units: info?.units ?? "",
+        units,
         lastUpdated: info?.last_updated ?? "",
         observations,
       },

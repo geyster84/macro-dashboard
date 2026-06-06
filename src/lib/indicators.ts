@@ -9,6 +9,8 @@ export interface Indicator {
   dangerThreshold?: number;   // 빨간 점선 (위험)
   // true면 "값이 낮을수록 위험" (예: 은행 준비금)
   invertSignal?: boolean;
+  // "yoy"면 지수 값을 전년比 %로 변환해서 표시 (CPI, M2 등)
+  transform?: "yoy";
 }
 
 // 🚨 Crisis Watch — 위기 감지 지표 10개
@@ -158,27 +160,41 @@ export const MACRO_INDICATORS: Indicator[] = [
     seriesId: "CPIAUCSL",
     displayName: "CPI (Headline)",
     category: "물가",
-    // 인덱스 절대값보다 YoY가 중요 - 차트에선 절대값
+    transform: "yoy",       // 전년比 %로 표시
+    warningThreshold: 4,    // 경계: 4%
+    dangerThreshold: 6,     // 위험: 6%
   },
   {
     seriesId: "CPILFESL",
     displayName: "Core CPI",
     category: "물가",
+    transform: "yoy",
+    warningThreshold: 4,    // 경계: 4%
+    dangerThreshold: 5,     // 위험: 5%
   },
   {
     seriesId: "PCEPI",
     displayName: "PCE Price Index",
     category: "물가",
+    transform: "yoy",
+    warningThreshold: 4,    // 경계: 4%
+    dangerThreshold: 6,     // 위험: 6%
   },
   {
     seriesId: "PCEPILFE",
     displayName: "Core PCE",
     category: "물가",
+    transform: "yoy",
+    warningThreshold: 3.5,  // 경계: 3.5%
+    dangerThreshold: 5,     // 위험: 5%
   },
   {
     seriesId: "PPIACO",
     displayName: "PPI (생산자물가)",
     category: "물가",
+    transform: "yoy",
+    warningThreshold: 6,    // 경계: 6%
+    dangerThreshold: 10,    // 위험: 10%
   },
 
   // 금리/통화
@@ -215,6 +231,9 @@ export const MACRO_INDICATORS: Indicator[] = [
     seriesId: "M2SL",
     displayName: "M2 통화량",
     category: "금리/통화",
+    transform: "yoy",
+    warningThreshold: 10,   // 경계: 10% (과잉 통화 증가)
+    dangerThreshold: 15,    // 위험: 15% (강한 인플레 압력)
   },
 
   // 소비/심리
@@ -259,3 +278,13 @@ export const MACRO_INDICATORS: Indicator[] = [
     dangerThreshold: 35,    // 위험: 35 (공포)
   },
 ];
+
+// 전체 지표 + seriesId로 지표 찾기 (route.ts에서 YoY 여부 판단에 사용)
+export const ALL_INDICATORS: Indicator[] = [
+  ...CRISIS_INDICATORS,
+  ...MACRO_INDICATORS,
+];
+
+export function findIndicator(seriesId: string): Indicator | undefined {
+  return ALL_INDICATORS.find((i) => i.seriesId === seriesId);
+}
