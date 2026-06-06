@@ -68,6 +68,13 @@ function formatYTick(v: number): string {
   return Number(v.toFixed(2)).toString();
 }
 
+// 역사적 백분위 문구 (top = 상위 몇 %인지)
+function percentileText(top: number): string {
+  if (top <= 1) return "역대 최고 수준 (상위 1% 이내)";
+  if (top >= 99) return "역대 최저 수준 (하위 1% 이내)";
+  return `상위 ${top}%`;
+}
+
 export default function IndicatorModal({
   seriesId,
   displayName,
@@ -77,6 +84,12 @@ export default function IndicatorModal({
   const [data, setData] = useState<SeriesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 역사적 백분위용 — 전체 기간 데이터 (선택 기간과 무관, 모달 열 때 1번만)
+  const [fullValues, setFullValues] = useState<number[] | null>(null);
+  const [fullSpan, setFullSpan] = useState<{ first: string; last: string } | null>(
+    null
+  );
 
   // ESC 키로 닫기 + 배경 스크롤 막기
   useEffect(() => {
@@ -91,7 +104,7 @@ export default function IndicatorModal({
     };
   }, [onClose]);
 
-  // 데이터 가져오기
+  // 차트용 데이터 가져오기 (선택 기간에 따라)
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -123,6 +136,41 @@ export default function IndicatorModal({
     };
   }, [seriesId, range]);
 
+  // 역사적 백분위용 전체 데이터 가져오기 (seriesId 바뀔 때만 1번)
+  useEffect(() => {
+    let cancelled = false;
+    setFullValues(null);
+    setFullSpan(null);
+
+    const url = `/api/fred?seriesId=${seriesId}`; // startDate 없음 = 전체 기간
+    queuedFetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((json) => {
+        if (cancelled) return;
+        const arr = json.observations || [];
+        const vals: number[] = arr
+          .map((o: { value: string }) => parseFloat(o.value))
+          .filter((v: number) => !isNaN(v));
+        setFullValues(vals);
+        if (arr.length) {
+          setFullSpan({
+            first: arr[0].date,
+            last: arr[arr.length - 1].date,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFullValues([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seriesId]);
+
   const obs = data
     ? data.observations
         .map((o) => ({ date: o.date, value: parseFloat(o.value) }))
@@ -138,10 +186,27 @@ export default function IndicatorModal({
   const isUp = change > 0;
   const isDown = change < 0;
 
-   // 이 지표의 위험 기준값 찾기
+  // 이 지표의 위험 기준값 찾기
   const indicator = [...CRISIS_INDICATORS, ...MACRO_INDICATORS].find(
     (i) => i.seriesId === seriesId
   );
+  const isYoY = indicator?.transform === "yoy";
+
+  // 역사적 백분위 계산 (전체 데이터의 가장 최근 값 기준)
+  let percentileTop: number | null = null;
+  let pctTotal = 0;
+  let spanText = "";
+  if (fullValues && fullValues.length >= 24) {
+    const total = fullValues.length;
+    const ref = fullValues[total - 1]; // 가장 최근 값
+    const below = fullValues.filter((v) => v < ref).length;
+    const rankFromBottom = (below / total) * 100; // 과거의 몇 %가 현재보다 낮은가
+    percentileTop = Math.round(100 - rankFromBottom);
+    pctTotal = total;
+    if (fullSpan) {
+      spanText = `${fullSpan.first.slice(0, 4)}년~${fullSpan.last.slice(0, 4)}년`;
+    }
+  }
 
   // 차트 Y축 범위 — 기준선까지 포함
   const dataMin = obs.length > 0 ? Math.min(...obs.map((o) => o.value)) : 0;
@@ -198,11 +263,12 @@ export default function IndicatorModal({
 
         {/* 현재값 */}
         {!loading && !error && data && (
-          <div className="flex items-baseline gap-3 mb-4 flex-wrap">
+          <div className="flex items-baseline gap-3 mb-2 flex-wrap">
             <span className="text-3xl sm:text-5xl font-bold text-white">
               {latestValue.toLocaleString(undefined, {
                 maximumFractionDigits: 2,
               })}
+              {isYoY ? "%" : ""}
             </span>
             <span
               className={`text-sm sm:text-base font-medium ${
@@ -214,8 +280,25 @@ export default function IndicatorModal({
               }`}
             >
               {isUp ? "▲" : isDown ? "▼" : "—"}{" "}
-              {Math.abs(change).toFixed(2)} ({changePercent.toFixed(2)}%)
+              {Math.abs(change).toFixed(2)}
+              {isYoY ? "%p" : ` (${changePercent.toFixed(2)}%)`}
             </span>
+          </div>
+        )}
+
+        {/* 역사적 백분위 */}
+        {!loading && !error && data && percentileTop !== null && (
+          <div className="mb-4 text-xs sm:text-sm">
+            <span className="text-gray-400">📊 역사적 위치: </span>
+            <span className="text-gray-100 font-semibold">
+              {percentileText(percentileTop)}
+            </span>
+            {spanText && (
+              <span className="text-gray-500">
+                {" "}
+                · {spanText} 데이터 {pctTotal.toLocaleString()}개 기준
+              </span>
+            )}
           </div>
         )}
 
@@ -263,7 +346,7 @@ export default function IndicatorModal({
                   }
                 />
                 {/* 위험 기준선 (가로) */}
-                  {indicator?.warningThreshold !== undefined && (
+                {indicator?.warningThreshold !== undefined && (
                   <ReferenceLine
                     y={indicator.warningThreshold}
                     stroke="#eab308"
