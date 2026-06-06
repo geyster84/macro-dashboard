@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const FRED_API_KEY = process.env.NEXT_PUBLIC_FRED_API_KEY;
+const FRED_API_KEY = process.env.FRED_API_KEY;
 const BASE_URL = "https://api.stlouisfed.org/fred";
 
 export const maxDuration = 30;

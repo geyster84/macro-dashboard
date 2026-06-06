@@ -1,5 +1,5 @@
 // FRED API 호출 함수 (재시도 + 타임아웃 + 메모리 캐시)
-const FRED_API_KEY = process.env.NEXT_PUBLIC_FRED_API_KEY;
+const FRED_API_KEY = process.env.FRED_API_KEY;
 const BASE_URL = "https://api.stlouisfed.org/fred";
 
 export interface FredObservation {

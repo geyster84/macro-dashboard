@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findIndicator } from "@/lib/indicators";
 
-const FRED_API_KEY = process.env.NEXT_PUBLIC_FRED_API_KEY;
+const FRED_API_KEY = process.env.FRED_API_KEY;
 const BASE_URL = "https://api.stlouisfed.org/fred";
 
 // Vercel 함수 최대 실행 시간(초) — FRED가 느려도 끊기지 않게 여유
