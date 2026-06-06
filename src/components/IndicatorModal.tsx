@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { CRISIS_INDICATORS, MACRO_INDICATORS } from "@/lib/indicators";
+import { INDICATOR_DESCRIPTIONS } from "@/lib/indicatorDescriptions";
 import { queuedFetch } from "@/lib/fetchQueue";
 
 interface Observation {
@@ -192,6 +193,9 @@ export default function IndicatorModal({
   );
   const isYoY = indicator?.transform === "yoy";
 
+  // 지표 설명 (정적 텍스트)
+  const description = INDICATOR_DESCRIPTIONS[seriesId];
+
   // 역사적 백분위 계산 (전체 데이터의 가장 최근 값 기준)
   let percentileTop: number | null = null;
   let pctTotal = 0;
@@ -288,7 +292,7 @@ export default function IndicatorModal({
 
         {/* 역사적 백분위 */}
         {!loading && !error && data && percentileTop !== null && (
-          <div className="mb-4 text-xs sm:text-sm">
+          <div className="mb-3 text-xs sm:text-sm">
             <span className="text-gray-400">📊 역사적 위치: </span>
             <span className="text-gray-100 font-semibold">
               {percentileText(percentileTop)}
@@ -299,6 +303,14 @@ export default function IndicatorModal({
                 · {spanText} 데이터 {pctTotal.toLocaleString()}개 기준
               </span>
             )}
+          </div>
+        )}
+
+        {/* 지표 설명 */}
+        {description && (
+          <div className="mb-4 rounded-lg bg-gray-800/60 border border-gray-700 p-3 text-xs sm:text-sm text-gray-300 leading-relaxed">
+            <span className="text-gray-400 font-medium">ℹ️ 이 지표는? </span>
+            {description}
           </div>
         )}
 
